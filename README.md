@@ -1,4 +1,4 @@
-# URL Shortener — Spring Boot
+# URL Shortener - Spring Boot
 
 A URL shortening service built with Spring Boot, Postgres, and Redis, designed as a one-day system-design-to-implementation exercise — covering functional requirements, non-functional requirements, capacity estimation, and architecture before writing any code.
 
