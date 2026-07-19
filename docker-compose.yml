@@ -7,8 +7,8 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_DB: url_shortener
-      POSTGRES_USER: url_admin
-      POSTGRES_PASSWORD: pass@123abhay
+      POSTGRES_USER: ${DB_USERNAME:url_admin}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
     ports:
       - "5432:5432"
     volumes:
