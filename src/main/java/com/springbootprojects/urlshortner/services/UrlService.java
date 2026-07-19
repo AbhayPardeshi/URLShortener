@@ -6,9 +6,11 @@ import com.springbootprojects.urlshortner.entities.IdempotencyKey;
 import com.springbootprojects.urlshortner.entities.Url;
 import com.springbootprojects.urlshortner.repository.IdempotencyRepository;
 import com.springbootprojects.urlshortner.repository.UrlRepository;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 import tools.jackson.databind.ObjectMapper;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
@@ -20,11 +22,16 @@ public class UrlService {
     private final IdempotencyRepository idempotencyRepository;
     private final UrlRepository urlRepository;
     private final ObjectMapper objectMapper;
+    private final RedisTemplate<String, String> redisTemplate;
 
-    public UrlService(IdempotencyRepository idempotencyRepository, UrlRepository urlRepository, ObjectMapper objectMapper){
+    public UrlService(IdempotencyRepository idempotencyRepository,
+                      UrlRepository urlRepository,
+                      ObjectMapper objectMapper,
+                      RedisTemplate<String,String> redisTemplate){
         this.idempotencyRepository = idempotencyRepository;
         this.urlRepository = urlRepository;
         this.objectMapper = objectMapper;
+        this.redisTemplate = redisTemplate;
     }
 
     public CreateUrlResponseDTO createShortUrl(CreateUrlRequestDTO request, UUID idempotencyKey) throws Exception {
@@ -84,8 +91,40 @@ public class UrlService {
         idempotencyRepository.save(idempotencyRecord);
 
         return responseDTO;
-
     }
 
+    public String getLongURL(String shortCode) throws Exception{
+        String cachedLongURL = redisTemplate.opsForValue().get(shortCode);
 
+        // cache hit
+        if(cachedLongURL !=null){
+            System.out.println("CACHE HIT for " + shortCode);
+            incrementClickCount(shortCode);
+            return cachedLongURL;
+        }
+
+        // cache miss
+        Url url = urlRepository.findByShortURL(shortCode)
+                .orElseThrow(() -> new Exception("url not found"));
+
+        if (url.getExpiredAt() != null && url.getExpiredAt().isBefore(Instant.now())) {
+            throw new Exception("Short URL has expired");
+        }
+
+        // add url to redis cache
+        redisTemplate.opsForValue().set(shortCode,url.getLongURL(), Duration.ofHours(24));
+
+        url.setClickCount(url.getClickCount() + 1);
+        urlRepository.save(url);
+
+        return url.getLongURL();
+    }
+
+    private void incrementClickCount(String shortCode) throws Exception {
+        Url url = urlRepository.findByShortURL(shortCode)
+                .orElseThrow(() -> new Exception("Short URL not found"));
+
+        url.setClickCount(url.getClickCount() + 1);
+        urlRepository.save(url);
+    }
 }
